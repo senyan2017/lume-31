@@ -650,7 +650,17 @@ end
 function lume.format(str, vars)
   if not vars then return str end
   local f = function(x)
-    return tostring(vars[x] or vars[tonumber(x)] or "{" .. x .. "}")
+    -- Resolve the placeholder by *presence* (nil check), not truthiness, so
+    -- legitimate falsy values such as `false` are inserted instead of being
+    -- mistaken for a missing variable. String keys take precedence over the
+    -- equivalent numeric index, e.g. `{1}` prefers vars["1"] then vars[1].
+    local v = vars[x]
+    if v == nil then
+      local n = tonumber(x)
+      if n ~= nil then v = vars[n] end
+    end
+    if v == nil then return "{" .. x .. "}" end
+    return tostring(v)
   end
   return (str:gsub("{(.-)}", f))
 end

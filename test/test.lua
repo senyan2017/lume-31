@@ -546,6 +546,18 @@ tests["lume.format"] = function()
   testeq( lume.format("{1} idx {2}", {"an", "test"}), "an idx test"       )
   testeq( lume.format("bad idx {-1}", {"x"}),         "bad idx {-1}"      )
   testeq( lume.format("empty {}", {"idx"}),           "empty {}"          )
+  -- falsy/edge values must be inserted, not treated as "missing"
+  testeq( lume.format("flag {a}", {a = false}),       "flag false"        )
+  testeq( lume.format("zero {a}", {a = 0}),           "zero 0"            )
+  testeq( lume.format("str '{a}'", {a = ""}),         "str ''"            )
+  testeq( lume.format("idx {1}", {false}),            "idx false"         )
+  -- repeated placeholders resolve every occurrence (incl. falsy values)
+  testeq( lume.format("{a} {a} {a}", {a = "x"}),      "x x x"             )
+  testeq( lume.format("{a}/{a}", {a = false}),        "false/false"       )
+  -- present keys win even when other keys are missing
+  testeq( lume.format("{a} {b}", {a = "hi"}),         "hi {b}"            )
+  -- string keys take precedence over the equivalent numeric index
+  testeq( lume.format("{1}", {[1] = "num", ["1"] = "str"}), "str"         )
 end
 
 -- lume.trace

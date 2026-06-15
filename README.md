@@ -385,10 +385,16 @@ lume.wordwrap("Hello world. This is a short string", 14)
 #### lume.format(str [, vars])
 Returns a formatted string. The values of keys in the table `vars` can be
 inserted into the string by using the form `"{key}"` in `str`; numerical keys
-can also be used.
+can also be used. A value is inserted whenever the key is *present*, so falsy
+values such as `false`, `0` and `""` are rendered normally. When a key is
+missing the placeholder is left untouched. If a string key and the equivalent
+numeric index are both supplied, the string key takes precedence.
 ```lua
 lume.format("{b} hi {a}", {a = "mark", b = "Oh"}) -- Returns "Oh hi mark"
 lume.format("Hello {1}!", {"world"}) -- Returns "Hello world!"
+lume.format("enabled: {on}", {on = false}) -- Returns "enabled: false"
+lume.format("count: {n}", {n = 0}) -- Returns "count: 0"
+lume.format("{a} and {b}", {a = "x"}) -- Returns "x and {b}"
 ```
 
 #### lume.trace(...)
