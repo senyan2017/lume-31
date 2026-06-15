@@ -131,8 +131,8 @@ end
 
 
 function lume.random(a, b)
-  if not a then a, b = 0, 1 end
-  if not b then b = 0 end
+  if a == nil then a, b = 0, 1 end
+  if b == nil then b = 0 end
   return a + math.random() * (b - a)
 end
 
@@ -650,7 +650,10 @@ end
 function lume.format(str, vars)
   if not vars then return str end
   local f = function(x)
-    return tostring(vars[x] or vars[tonumber(x)] or "{" .. x .. "}")
+    local v = vars[x]
+    if v == nil then v = vars[tonumber(x)] end
+    if v == nil then return "{" .. x .. "}" end
+    return tostring(v)
   end
   return (str:gsub("{(.-)}", f))
 end

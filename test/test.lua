@@ -97,6 +97,18 @@ tests["lume.random"] = function()
   testeq( type(lume.random()),      "number" )
   testeq( type(lume.random(1)),     "number" )
   testeq( type(lume.random(1, 2)),  "number" )
+  -- regression: 0 as first arg must not be treated as nil
+  for i = 1, 20 do
+    local r = lume.random(0, 10)
+    testeq( r >= 0 and r <= 10, true )
+  end
+  -- regression: 0 as second arg
+  for i = 1, 20 do
+    local r = lume.random(-5, 0)
+    testeq( r >= -5 and r <= 0, true )
+  end
+  -- regression: both args 0 returns 0
+  testeq( lume.random(0, 0), 0 )
 end
 
 -- lume.randomchoice
@@ -546,6 +558,26 @@ tests["lume.format"] = function()
   testeq( lume.format("{1} idx {2}", {"an", "test"}), "an idx test"       )
   testeq( lume.format("bad idx {-1}", {"x"}),         "bad idx {-1}"      )
   testeq( lume.format("empty {}", {"idx"}),           "empty {}"          )
+  -- regression: false value must not be treated as missing
+  testeq( lume.format("{a}", {a = false}),            "false"             )
+  -- regression: 0 value must render correctly
+  testeq( lume.format("{a}", {a = 0}),                "0"                 )
+  -- regression: empty string value must render as empty
+  testeq( lume.format("{a}", {a = ""}),               ""                  )
+  -- regression: repeated placeholder renders each occurrence
+  testeq( lume.format("{x} and {x}", {x = "hi"}),    "hi and hi"         )
+  -- regression: non-existent key preserves placeholder
+  testeq( lume.format("{a}{b}", {a = "ok"}),          "ok{b}"             )
+  -- regression: numeric index with false value
+  testeq( lume.format("{1}", {false}),                "false"             )
+  -- regression: numeric index with 0 value
+  testeq( lume.format("{1}", {0}),                    "0"                 )
+  -- regression: mixed string and numeric keys
+  testeq( lume.format("{1} {a}", {a = "y", "x"}),    "x y"               )
+  -- regression: nil value preserves placeholder
+  testeq( lume.format("{a}", {a = nil}),              "{a}"               )
+  -- regression: boolean true
+  testeq( lume.format("{a}", {a = true}),             "true"              )
 end
 
 -- lume.trace
