@@ -489,6 +489,23 @@ lume.count(t, { age = 10 }) -- returns 2
 ```
 
 
+## Tests
+
+A small, dependency-free smoke check covers the table, string, serialization
+and chaining helpers and can be run from the project root with any Lua 5.x
+interpreter:
+
+```
+lua smoke.lua
+```
+
+The full regression suite lives in `test/` and is run from that directory:
+
+```
+cd test && lua test.lua
+```
+
+
 ## License
 
 This library is free software; you can redistribute it and/or modify it under

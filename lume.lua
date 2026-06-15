@@ -21,6 +21,21 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 -- SOFTWARE.
 --
+--
+-- The public API (function names, return conventions and the `:chain()` style)
+-- is unchanged; this file is organised purely to keep related capabilities
+-- together. Sections, in order:
+--
+--   1. Private helpers      -- internal-only building blocks (see banner below)
+--   2. Math
+--   3. Random
+--   4. Tables / collections
+--   5. Functions
+--   6. Serialization
+--   7. Strings
+--   8. System / misc
+--   9. Chaining
+--
 
 local lume = { _version = "2.3.0" }
 
@@ -32,6 +47,24 @@ local math_ceil = math.ceil
 local math_atan2 = math.atan2 or math.atan
 local math_sqrt = math.sqrt
 local math_abs = math.abs
+
+
+----------------------------------------------------------------------
+-- Private helpers
+--
+-- Everything between this banner and the first `lume.*` definition is
+-- internal-only and never exported. It is the single place to look for
+-- reusable building blocks, and the place to add new ones: a helper shared
+-- by more than one public function belongs here.
+--
+--   * stateless utilities .......... noop, identity, patternescape, absindex
+--   * type / iteration helpers ..... iscallable, getiter, iteratee, getiterfn
+--
+-- Helpers that are private to exactly *one* public function -- memoize's
+-- cache keys, the lambda cache, the serializer, ripairs' iterator and the
+-- chain metatable -- are deliberately kept next to their owner further down
+-- so the coupling stays local and visible rather than pooled up here.
+----------------------------------------------------------------------
 
 local noop = function()
 end
@@ -77,7 +110,21 @@ local iteratee = function(x)
   return function(z) return z[x] end
 end
 
+-- Resolves a user-supplied iteratee `fn` (function / table / string / nil)
+-- and returns both the matching iterator for `t` and the resolved function.
+-- Every collection function that walks a table *with* an iteratee -- map,
+-- all, any, filter, match -- funnels through here instead of repeating the
+-- `fn = iteratee(fn); local iter = getiter(t)` prelude. `iteratee` never
+-- raises, so a non-table `t` still errors via `getiter`, exactly as before.
+local getiterfn = function(t, fn)
+  fn = iteratee(fn)
+  return getiter(t), fn
+end
 
+
+----------------------------------------------------------------------
+-- Math
+----------------------------------------------------------------------
 
 function lume.clamp(x, min, max)
   return x < min and min or (x > max and max or x)
@@ -130,6 +177,10 @@ function lume.vector(angle, magnitude)
 end
 
 
+----------------------------------------------------------------------
+-- Random
+----------------------------------------------------------------------
+
 function lume.random(a, b)
   if not a then a, b = 0, 1 end
   if not b then b = 0 end
@@ -156,6 +207,10 @@ function lume.weightedchoice(t)
   end
 end
 
+
+----------------------------------------------------------------------
+-- Tables / collections
+----------------------------------------------------------------------
 
 function lume.isarray(x)
   return type(x) == "table" and x[1] ~= nil
@@ -257,8 +312,7 @@ end
 
 
 function lume.map(t, fn)
-  fn = iteratee(fn)
-  local iter = getiter(t)
+  local iter, fn = getiterfn(t, fn)
   local rtn = {}
   for k, v in iter(t) do rtn[k] = fn(v) end
   return rtn
@@ -266,8 +320,7 @@ end
 
 
 function lume.all(t, fn)
-  fn = iteratee(fn)
-  local iter = getiter(t)
+  local iter, fn = getiterfn(t, fn)
   for _, v in iter(t) do
     if not fn(v) then return false end
   end
@@ -276,8 +329,7 @@ end
 
 
 function lume.any(t, fn)
-  fn = iteratee(fn)
-  local iter = getiter(t)
+  local iter, fn = getiterfn(t, fn)
   for _, v in iter(t) do
     if fn(v) then return true end
   end
@@ -312,8 +364,7 @@ end
 
 
 function lume.filter(t, fn, retainkeys)
-  fn = iteratee(fn)
-  local iter = getiter(t)
+  local iter, fn = getiterfn(t, fn)
   local rtn = {}
   if retainkeys then
     for k, v in iter(t) do
@@ -329,19 +380,10 @@ end
 
 
 function lume.reject(t, fn, retainkeys)
+  -- The exact inverse of filter(); resolve the iteratee once here and let
+  -- filter() do the iteration so the two stay in lock-step by construction.
   fn = iteratee(fn)
-  local iter = getiter(t)
-  local rtn = {}
-  if retainkeys then
-    for k, v in iter(t) do
-      if not fn(v) then rtn[k] = v end
-    end
-  else
-    for _, v in iter(t) do
-      if not fn(v) then rtn[#rtn + 1] = v end
-    end
-  end
-  return rtn
+  return lume.filter(t, function(x) return not fn(x) end, retainkeys)
 end
 
 
@@ -383,8 +425,7 @@ end
 
 
 function lume.match(t, fn)
-  fn = iteratee(fn)
-  local iter = getiter(t)
+  local iter, fn = getiterfn(t, fn)
   for k, v in iter(t) do
     if fn(v) then return v, k end
   end
@@ -464,6 +505,10 @@ function lume.clone(t)
   return rtn
 end
 
+
+----------------------------------------------------------------------
+-- Functions
+----------------------------------------------------------------------
 
 function lume.fn(fn, ...)
   assert(iscallable(fn), "expected a function as the first argument")
@@ -554,6 +599,10 @@ function lume.lambda(str)
 end
 
 
+----------------------------------------------------------------------
+-- Serialization
+----------------------------------------------------------------------
+
 local serialize
 
 local serialize_map = {
@@ -596,6 +645,10 @@ function lume.deserialize(str)
   return lume.dostring("return " .. str)
 end
 
+
+----------------------------------------------------------------------
+-- Strings
+----------------------------------------------------------------------
 
 function lume.split(str, sep)
   if not sep then
@@ -655,6 +708,10 @@ function lume.format(str, vars)
   return (str:gsub("{(.-)}", f))
 end
 
+
+----------------------------------------------------------------------
+-- System / misc
+----------------------------------------------------------------------
 
 function lume.trace(...)
   local info = debug.getinfo(2, "Sl")
@@ -755,6 +812,13 @@ function lume.color(str, mul)
   return r * mul, g * mul, b * mul, a * mul
 end
 
+
+----------------------------------------------------------------------
+-- Chaining
+--
+-- Built last, once every public function exists: the chain metatable mirrors
+-- each callable `lume.*` as a method that threads `self._value` through it.
+----------------------------------------------------------------------
 
 local chain_mt = {}
 chain_mt.__index = lume.map(lume.filter(lume, iscallable, true),
