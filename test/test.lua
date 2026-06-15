@@ -414,6 +414,62 @@ tests["lume.clone"] = function()
   testeq( lume.clone({x=2, y="a"}), {x=2, y="a"} )
 end
 
+-- lume.get
+tests["lume.get"] = function()
+  local t = { player = { name = "mary", items = { "axe", "shield" } }, n = 0 }
+  testeq( lume.get(t, "player.name"),             "mary"   )
+  testeq( lume.get(t, { "player", "items", 2 }),  "shield" )
+  testeq( lume.get(t, "player.items.1"),          "axe"    )
+  testeq( lume.get(t, "player.level"),            nil      )
+  testeq( lume.get(t, "player.level", 1),         1        )
+  testeq( lume.get(t, "n.x", "def"),              "def"    )
+  testeq( lume.get(t, "a.b.c", "def"),            "def"    )
+  testeq( lume.get(t, { "player" }), { name = "mary", items = { "axe", "shield" } } )
+end
+
+-- lume.set
+tests["lume.set"] = function()
+  local t = {}
+  testeq( lume.set(t, "player.name", "mary"), t )
+  testeq( t, { player = { name = "mary" } } )
+  lume.set(t, { "player", "items", 1 }, "axe")
+  testeq( t.player.items, { "axe" } )
+  lume.set(t, "player.items.2", "shield")
+  testeq( t.player.items, { "axe", "shield" } )
+  lume.set(t, "player.name", "jane")
+  testeq( t.player.name, "jane" )
+  local u = { a = 5 }
+  tester.test.error( lume.set, u, "a.b", 1 )
+  testeq( u, { a = 5 } )
+  tester.test.error( lume.set, {}, "", 1 )
+end
+
+-- lume.has
+tests["lume.has"] = function()
+  local t = { stats = { hp = 10, dead = false }, items = { "axe" } }
+  testeq( lume.has(t, "stats.hp"),     true  )
+  testeq( lume.has(t, { "items", 1 }), true  )
+  testeq( lume.has(t, "stats.dead"),   true  )
+  testeq( lume.has(t, "stats.mp"),     false )
+  testeq( lume.has(t, "items.2"),      false )
+  testeq( lume.has(t, "stats.hp.x"),   false )
+  testeq( lume.has(t, ""),             false )
+end
+
+-- lume.unset
+tests["lume.unset"] = function()
+  local t = { player = { name = "mary", hp = 10 }, items = { "axe", "shield" } }
+  testeq( lume.unset(t, "player.hp"), t )
+  testeq( t.player, { name = "mary" } )
+  lume.unset(t, "player.mp")
+  testeq( t.player, { name = "mary" } )
+  lume.unset(t, "a.b.c")
+  testeq( t.player, { name = "mary" } )
+  lume.unset(t, { "items", 2 })
+  testeq( t.items, { "axe" } )
+  tester.test.error( lume.unset, t, "" )
+end
+
 -- lume.fn
 tests["lume.fn"] = function()
   local f = lume.fn(function(a, b) return a + b end, 10)

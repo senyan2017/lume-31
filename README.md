@@ -277,6 +277,53 @@ Returns an array containing each key of the table.
 #### lume.clone(t)
 Returns a shallow copy of the table `t`.
 
+#### lume.get(t, path [, default])
+Returns the value found in the nested table `t` at `path`. A `path` may be
+given either as an array of keys or as a dot-separated string; integer segments
+in a string path are treated as array indices (use the array form if you need a
+string key that looks like a number). If any part of the path is missing then
+`default` is returned, or `nil` when `default` is not supplied.
+```lua
+local save = { player = { name = "mary", items = { "axe", "shield" } } }
+lume.get(save, "player.name")             -- Returns "mary"
+lume.get(save, { "player", "items", 2 })  -- Returns "shield"
+lume.get(save, "player.items.1")          -- Returns "axe"
+lume.get(save, "player.level", 1)         -- Returns 1 (path missing)
+```
+
+#### lume.set(t, path, value)
+Sets `value` in the nested table `t` at `path` and returns `t`. Any missing
+intermediate tables along the path are created automatically. If an existing
+value along the path is not a table an error is raised, so non-table values are
+never silently overwritten. `path` accepts the same forms as `lume.get()`.
+```lua
+local save = {}
+lume.set(save, "player.name", "mary")
+-- `save` becomes { player = { name = "mary" } }
+lume.set(save, { "player", "items", 1 }, "axe")
+-- `save.player.items` becomes { "axe" }
+```
+
+#### lume.has(t, path)
+Returns `true` if `path` resolves to a non-nil value in the nested table `t`,
+otherwise returns `false`. `path` accepts the same forms as `lume.get()`.
+```lua
+local save = { stats = { hp = 10 }, items = { "axe" } }
+lume.has(save, "stats.hp")       -- Returns true
+lume.has(save, { "items", 1 })   -- Returns true
+lume.has(save, "stats.mp")       -- Returns false
+```
+
+#### lume.unset(t, path)
+Removes the value at `path` from the nested table `t` and returns `t`. If the
+path does not exist the table is left unchanged. `path` accepts the same forms
+as `lume.get()`.
+```lua
+local save = { player = { name = "mary", hp = 10 } }
+lume.unset(save, "player.hp")    -- `save.player` becomes { name = "mary" }
+lume.unset(save, "player.mp")    -- No effect; `save` is unchanged
+```
+
 #### lume.fn(fn, ...)
 Creates a wrapper function around function `fn`, automatically inserting the
 arguments into `fn` which will persist every time the wrapper is called. Any

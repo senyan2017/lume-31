@@ -465,6 +465,76 @@ function lume.clone(t)
 end
 
 
+local function topath(path)
+  if type(path) == "table" then return path end
+  assert(type(path) == "string", "expected path to be a string or table")
+  local keys = {}
+  for key in path:gmatch("[^.]+") do
+    keys[#keys + 1] = key:match("^%d+$") and tonumber(key) or key
+  end
+  return keys
+end
+
+
+function lume.get(t, path, default)
+  local keys = topath(path)
+  local node = t
+  for i = 1, #keys do
+    if type(node) ~= "table" then return default end
+    node = node[keys[i]]
+  end
+  if node == nil then return default end
+  return node
+end
+
+
+function lume.set(t, path, value)
+  local keys = topath(path)
+  assert(#keys > 0, "expected a non-empty path")
+  local node = t
+  for i = 1, #keys - 1 do
+    local key = keys[i]
+    local nxt = node[key]
+    if nxt == nil then
+      nxt = {}
+      node[key] = nxt
+    elseif type(nxt) ~= "table" then
+      error("cannot set path: '" .. tostring(key) .. "' is not a table", 2)
+    end
+    node = nxt
+  end
+  node[keys[#keys]] = value
+  return t
+end
+
+
+function lume.has(t, path)
+  local keys = topath(path)
+  if #keys == 0 then return false end
+  local node = t
+  for i = 1, #keys do
+    if type(node) ~= "table" or node[keys[i]] == nil then return false end
+    node = node[keys[i]]
+  end
+  return true
+end
+
+
+function lume.unset(t, path)
+  local keys = topath(path)
+  assert(#keys > 0, "expected a non-empty path")
+  local node = t
+  for i = 1, #keys - 1 do
+    if type(node) ~= "table" then return t end
+    node = node[keys[i]]
+  end
+  if type(node) == "table" then
+    node[keys[#keys]] = nil
+  end
+  return t
+end
+
+
 function lume.fn(fn, ...)
   assert(iscallable(fn), "expected a function as the first argument")
   local args = { ... }
