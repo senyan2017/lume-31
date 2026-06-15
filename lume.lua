@@ -465,6 +465,75 @@ function lume.clone(t)
 end
 
 
+local parsepath = function(path)
+  if type(path) == "table" then return path end
+  if type(path) == "string" then
+    local keys = {}
+    for k in path:gmatch("[^%.]+") do
+      keys[#keys + 1] = k
+    end
+    return keys
+  end
+  error("expected path to be a string or table", 3)
+end
+
+function lume.get(t, path)
+  local keys = parsepath(path)
+  local cur = t
+  for i = 1, #keys do
+    if type(cur) ~= "table" then return nil end
+    cur = cur[keys[i]]
+  end
+  return cur
+end
+
+
+function lume.set(t, path, value)
+  local keys = parsepath(path)
+  if #keys == 0 then error("empty path") end
+  local cur = t
+  for i = 1, #keys - 1 do
+    local k = keys[i]
+    if cur[k] == nil then
+      cur[k] = {}
+    elseif type(cur[k]) ~= "table" then
+      error("cannot set path through non-table value at key '" .. tostring(k) .. "'")
+    end
+    cur = cur[k]
+  end
+  cur[keys[#keys]] = value
+  return t
+end
+
+
+function lume.has(t, path)
+  local keys = parsepath(path)
+  local cur = t
+  for i = 1, #keys do
+    if type(cur) ~= "table" then return false end
+    if cur[keys[i]] == nil then return false end
+    cur = cur[keys[i]]
+  end
+  return true
+end
+
+
+function lume.del(t, path)
+  local keys = parsepath(path)
+  if #keys == 0 then return t end
+  local cur = t
+  for i = 1, #keys - 1 do
+    if type(cur) ~= "table" then return t end
+    cur = cur[keys[i]]
+    if cur == nil then return t end
+  end
+  if type(cur) == "table" then
+    cur[keys[#keys]] = nil
+  end
+  return t
+end
+
+
 function lume.fn(fn, ...)
   assert(iscallable(fn), "expected a function as the first argument")
   local args = { ... }

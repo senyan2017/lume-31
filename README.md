@@ -277,6 +277,47 @@ Returns an array containing each key of the table.
 #### lume.clone(t)
 Returns a shallow copy of the table `t`.
 
+#### lume.get(t, path)
+Returns the value at the given `path` inside table `t`, or `nil` if the path
+does not exist. `path` can be a dot-separated string or an array of keys.
+```lua
+local t = { a = { b = { c = 42 } } }
+lume.get(t, "a.b.c")          -- Returns 42
+lume.get(t, {"a", "b", "c"})  -- Returns 42
+lume.get(t, "a.x")            -- Returns nil
+```
+
+#### lume.set(t, path, value)
+Sets the value at the given `path` inside table `t` and returns `t`.
+Intermediate tables are created automatically when the path segment does not
+exist, but an error is raised if a non-table value would need to be traversed.
+```lua
+local t = {}
+lume.set(t, "a.b.c", 42)  -- `t` becomes { a = { b = { c = 42 } } }
+
+local t2 = { players = { { name = "alice" }, { name = "bob" } } }
+lume.set(t2, {"players", 2, "name"}, "carol")
+-- `t2` becomes { players = { { name = "alice" }, { name = "carol" } } }
+```
+
+#### lume.has(t, path)
+Returns `true` if the given `path` exists inside table `t`, `false` otherwise.
+```lua
+local t = { a = { b = 1 } }
+lume.has(t, "a.b")   -- Returns true
+lume.has(t, "a.x")   -- Returns false
+lume.has(t, "a.b.c") -- Returns false (b is not a table)
+```
+
+#### lume.del(t, path)
+Deletes the value at the given `path` inside table `t` and returns `t`. If the
+path does not exist the table is returned unmodified.
+```lua
+local t = { a = { b = { c = 42, d = 99 } } }
+lume.del(t, "a.b.c")  -- `t` becomes { a = { b = { d = 99 } } }
+lume.del(t, "a.x.y")  -- `t` is unchanged (path did not exist)
+```
+
 #### lume.fn(fn, ...)
 Creates a wrapper function around function `fn`, automatically inserting the
 arguments into `fn` which will persist every time the wrapper is called. Any
