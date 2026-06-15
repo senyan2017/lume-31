@@ -24,6 +24,10 @@
 
 local lume = { _version = "2.3.0" }
 
+-- ===========================================================================
+-- Local aliases
+-- ===========================================================================
+
 local pairs, ipairs = pairs, ipairs
 local type, assert, unpack = type, assert, unpack or table.unpack
 local tostring, tonumber = tostring, tonumber
@@ -33,6 +37,12 @@ local math_atan2 = math.atan2 or math.atan
 local math_sqrt = math.sqrt
 local math_abs = math.abs
 
+-- ===========================================================================
+-- Private helpers
+-- ===========================================================================
+
+--- Sentinel / identity utilities ---
+
 local noop = function()
 end
 
@@ -40,19 +50,17 @@ local identity = function(x)
   return x
 end
 
-local patternescape = function(str)
-  return str:gsub("[%(%)%.%%%+%-%*%?%[%]%^%$]", "%%%1")
-end
-
-local absindex = function(len, i)
-  return i < 0 and (len + i + 1) or i
-end
+--- Type / callable checks ---
 
 local iscallable = function(x)
   if type(x) == "function" then return true end
   local mt = getmetatable(x)
   return mt and mt.__call ~= nil
 end
+
+--- Iterator resolution ---
+-- Centralises the "is this an array or a hash?" decision so that every
+-- public table helper doesn't have to repeat it.
 
 local getiter = function(x)
   if lume.isarray(x) then
@@ -62,6 +70,10 @@ local getiter = function(x)
   end
   error("expected table", 3)
 end
+
+--- Iteratee resolution ---
+-- Converts nil / string / table / function arguments into a callable.
+-- Used by map, all, any, filter, reject, match, count.
 
 local iteratee = function(x)
   if x == nil then return identity end
@@ -77,7 +89,45 @@ local iteratee = function(x)
   return function(z) return z[x] end
 end
 
+--- Index helpers ---
 
+local absindex = function(len, i)
+  return i < 0 and (len + i + 1) or i
+end
+
+--- String helpers (private) ---
+
+local patternescape = function(str)
+  return str:gsub("[%(%)%.%%%+%-%*%?%[%]%^%$]", "%%%1")
+end
+
+--- Internal filter core ---
+-- Shared by lume.filter and lume.reject to eliminate duplicated logic.
+-- `negate` controls whether we keep truthy (false) or falsy (true) results.
+
+local filter_internal = function(t, fn, retainkeys, negate)
+  fn = iteratee(fn)
+  local iter = getiter(t)
+  local rtn = {}
+  if retainkeys then
+    for k, v in iter(t) do
+      local ok = fn(v)
+      if negate then ok = not ok end
+      if ok then rtn[k] = v end
+    end
+  else
+    for _, v in iter(t) do
+      local ok = fn(v)
+      if negate then ok = not ok end
+      if ok then rtn[#rtn + 1] = v end
+    end
+  end
+  return rtn
+end
+
+-- ===========================================================================
+-- Public API — Math utilities
+-- ===========================================================================
 
 function lume.clamp(x, min, max)
   return x < min and min or (x > max and max or x)
@@ -156,6 +206,9 @@ function lume.weightedchoice(t)
   end
 end
 
+-- ===========================================================================
+-- Public API — Table utilities
+-- ===========================================================================
 
 function lume.isarray(x)
   return type(x) == "table" and x[1] ~= nil
@@ -312,36 +365,12 @@ end
 
 
 function lume.filter(t, fn, retainkeys)
-  fn = iteratee(fn)
-  local iter = getiter(t)
-  local rtn = {}
-  if retainkeys then
-    for k, v in iter(t) do
-      if fn(v) then rtn[k] = v end
-    end
-  else
-    for _, v in iter(t) do
-      if fn(v) then rtn[#rtn + 1] = v end
-    end
-  end
-  return rtn
+  return filter_internal(t, fn, retainkeys, false)
 end
 
 
 function lume.reject(t, fn, retainkeys)
-  fn = iteratee(fn)
-  local iter = getiter(t)
-  local rtn = {}
-  if retainkeys then
-    for k, v in iter(t) do
-      if not fn(v) then rtn[k] = v end
-    end
-  else
-    for _, v in iter(t) do
-      if not fn(v) then rtn[#rtn + 1] = v end
-    end
-  end
-  return rtn
+  return filter_internal(t, fn, retainkeys, true)
 end
 
 
@@ -465,6 +494,21 @@ function lume.clone(t)
 end
 
 
+function lume.ripairs(t)
+  local iter = function(t, i)
+    i = i - 1
+    local v = t[i]
+    if v ~= nil then
+      return i, v
+    end
+  end
+  return iter, t, (#t + 1)
+end
+
+-- ===========================================================================
+-- Public API — Function utilities
+-- ===========================================================================
+
 function lume.fn(fn, ...)
   assert(iscallable(fn), "expected a function as the first argument")
   local args = { ... }
@@ -553,49 +597,9 @@ function lume.lambda(str)
   return lambda_cache[str]
 end
 
-
-local serialize
-
-local serialize_map = {
-  [ "boolean" ] = tostring,
-  [ "nil"     ] = tostring,
-  [ "string"  ] = function(v) return string.format("%q", v) end,
-  [ "number"  ] = function(v)
-    if      v ~=  v     then return  "0/0"      --  nan
-    elseif  v ==  1 / 0 then return  "1/0"      --  inf
-    elseif  v == -1 / 0 then return "-1/0" end  -- -inf
-    return tostring(v)
-  end,
-  [ "table"   ] = function(t, stk)
-    stk = stk or {}
-    if stk[t] then error("circular reference") end
-    local rtn = {}
-    stk[t] = true
-    for k, v in pairs(t) do
-      rtn[#rtn + 1] = "[" .. serialize(k, stk) .. "]=" .. serialize(v, stk)
-    end
-    stk[t] = nil
-    return "{" .. table.concat(rtn, ",") .. "}"
-  end
-}
-
-setmetatable(serialize_map, {
-  __index = function(_, k) error("unsupported serialize type: " .. k) end
-})
-
-serialize = function(x, stk)
-  return serialize_map[type(x)](x, stk)
-end
-
-function lume.serialize(x)
-  return serialize(x)
-end
-
-
-function lume.deserialize(str)
-  return lume.dostring("return " .. str)
-end
-
+-- ===========================================================================
+-- Public API — String utilities
+-- ===========================================================================
 
 function lume.split(str, sep)
   if not sep then
@@ -655,6 +659,55 @@ function lume.format(str, vars)
   return (str:gsub("{(.-)}", f))
 end
 
+-- ===========================================================================
+-- Public API — Serialization
+-- ===========================================================================
+
+local serialize
+
+local serialize_map = {
+  [ "boolean" ] = tostring,
+  [ "nil"     ] = tostring,
+  [ "string"  ] = function(v) return string.format("%q", v) end,
+  [ "number"  ] = function(v)
+    if      v ~=  v     then return  "0/0"      --  nan
+    elseif  v ==  1 / 0 then return  "1/0"      --  inf
+    elseif  v == -1 / 0 then return "-1/0" end  -- -inf
+    return tostring(v)
+  end,
+  [ "table"   ] = function(t, stk)
+    stk = stk or {}
+    if stk[t] then error("circular reference") end
+    local rtn = {}
+    stk[t] = true
+    for k, v in pairs(t) do
+      rtn[#rtn + 1] = "[" .. serialize(k, stk) .. "]=" .. serialize(v, stk)
+    end
+    stk[t] = nil
+    return "{" .. table.concat(rtn, ",") .. "}"
+  end
+}
+
+setmetatable(serialize_map, {
+  __index = function(_, k) error("unsupported serialize type: " .. k) end
+})
+
+serialize = function(x, stk)
+  return serialize_map[type(x)](x, stk)
+end
+
+function lume.serialize(x)
+  return serialize(x)
+end
+
+
+function lume.deserialize(str)
+  return lume.dostring("return " .. str)
+end
+
+-- ===========================================================================
+-- Public API — Miscellaneous
+-- ===========================================================================
 
 function lume.trace(...)
   local info = debug.getinfo(2, "Sl")
@@ -721,19 +774,6 @@ function lume.hotswap(modname)
 end
 
 
-local ripairs_iter = function(t, i)
-  i = i - 1
-  local v = t[i]
-  if v ~= nil then
-    return i, v
-  end
-end
-
-function lume.ripairs(t)
-  return ripairs_iter, t, (#t + 1)
-end
-
-
 function lume.color(str, mul)
   mul = mul or 1
   local r, g, b, a
@@ -755,6 +795,9 @@ function lume.color(str, mul)
   return r * mul, g * mul, b * mul, a * mul
 end
 
+-- ===========================================================================
+-- Public API — Chain
+-- ===========================================================================
 
 local chain_mt = {}
 chain_mt.__index = lume.map(lume.filter(lume, iscallable, true),
